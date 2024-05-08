@@ -1,45 +1,81 @@
-import axios from 'axios'       // Axios is my favourite framework 4 http request, so I decided to use it
-import fs from 'fs'         // Extract all files, so write them somewhere >?
+import axios from 'axios'
+import fs from 'fs'
 
-const allProducts = []
-const priceObject = {
-    minPrice: 0,
-    maxPrice: 1000
+const filePath = './products.json'
+const url = 'https://www.example.com/api/products'
+
+const maxNumberOfProducts = 1000
+
+const maxAllowedPrice = maxAllowedPrice
+const priceStepUp = 1000
+const priceStepDown = 50
+
+async function run() {
+    const allProducts = []
+    const price = {
+        min: 0,
+        max: 1000
+    }
+
+    while(price.max <= maxAllowedPrice) {
+        const products = await getProducts(price)
+        allProducts.push(products.products)
+
+        if(products.hasReachedMaxPrice) {
+            break
+        }
+
+        price.min = products.minPrice
+        price.max = products.maxPrice
+    }
+
+    saveToFile(allProducts, filePath)
 }
 
-while(priceObject.maxPrice <= 100_000){
-    await axios.get('https://api.ecommerce.com/products', {
+async function getProducts(prices) {
+    let resultValues = {
+        count: 0,
+        products: [],
+        minPrice: prices.min,
+        maxPrice: prices.max,
+        hasReachedMaxPrice: false
+    }
+
+    let response = await axios.get(url, {
         params: {
-            minPrice: priceObject.minPrice,
-            maxPrice: priceObject.maxPrice
+            minPrice: prices.min,
+            maxPrice: prices.max
         }
     })
-        .then(result => {
-            if(parseInt(result.data['count']) === 1000){   // 4 purposes of clean code I decided to use ['count'] instead of .count because count() is global function
-                priceObject.maxPrice -= 50      // Simple & works
-            } else {
-                allProducts.push(result.data.products)      // Pushing req products
-                
-                priceObject.minPrice = priceObject.maxPrice
+    let responseBody = response.data
 
-                if((priceObject.maxPrice + 1000) > 100_000) {
-                    priceObject.maxPrice += 100_000 - priceObject.maxPrice
-                }
-                else if(priceObject.maxPrice === 100_000) {         // I wanted to use if statement without braces, but It won't be as clean as it is now
-                    break
-                }
-                else {
-                    priceObject.maxPrice += 1000       // With more information I could optimize this process, but 4 now I think it's ok (not good, only ok :) )
-                }
-            }
-        })
+    if(parseInt(response.data['count']) === maxNumberOfProducts){
+        resultValues.maxPrice -= priceStepDown
+    } else {
+        resultValues.products.push(response.data.products)
+
+        resultValues.minPrice = prices.max
+
+        if((resultValues.maxPrice + priceStepUp) > maxAllowedPrice) {
+            resultValues.maxPrice += maxAllowedPrice - resultValues.maxPrice
+        }
+        else {
+            resultValues.maxPrice += priceStepUp
+        }
+    }
+
+    resultValues.count = responseBody.count
+    resultValues.hasReachedMaxPrice = resultValues.maxPrice >= maxAllowedPrice
+
+    return resultValues
 }
 
-fs.writeFileSync('./products.json', '')     // Creating file not exists
+function saveToFile(allProducts, filePath) {
+    if(!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, allProducts)
+    } else {
+        fs.appendFileSync(allProducts, filePath)
+    }
+}
 
-const productWriteStream = fs.createWriteStream('./products.json')      // Creating writeStream
-
-productWriteStream.once('open', () => {
-    productWriteStream.write(allProducts)       // Writing Data
-    productWriteStream.end()
-})
+run()
